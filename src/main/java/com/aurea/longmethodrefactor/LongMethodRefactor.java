@@ -21,11 +21,20 @@ import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.VoidType;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserParameterDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserSymbolDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserVariableDeclaration;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -33,24 +42,61 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.ListUtils;
 import org.springframework.util.StringUtils;
 
+@Slf4j
 public class LongMethodRefactor {
 
     private static final int MIN_STATEMENTS = 3;
     private static final String GET = "get";
     private static final int maxLength = 10;
+    private static final String JAVA_SUFFIX = ".java";
 
-    public static void main(String[] args) throws FileNotFoundException {
-        File javaFile = new File("/home/chomnoue/projects/bootcamp/long-method-refactor-reference/src/main/java/com"
-                + "/aurea/longmethod/refactor/Test.java");
-        CompilationUnit compilationUnit = JavaParser.parse(javaFile);
+    public static void main(String[] args) throws IOException {
+        Path rootPath = Paths.get("/home/chomnoue/projects/bootcamp/long-method-refactor-reference/src/main/java");
+        JavaSymbolSolver symbolSolver = new JavaSymbolSolver(new JavaParserTypeSolver(rootPath));
+        List<Path> javaFiles = Files.walk(rootPath)
+                .filter(path -> Files.isRegularFile(path) && path.toFile().getName().endsWith(JAVA_SUFFIX))
+                .collect(Collectors.toList());
+        int total = javaFiles.size();
+        log.debug("Performing Long Method refactoring for {} files", total);
+        for (int i = 0; i < total; i++) {
+            float percent = 100f * (i+1) / total;
+            log.debug("Refactoring {}: {}%s", javaFiles.get(i), percent);
+            refactorLonMethods(javaFiles.get(i), symbolSolver);
+        }
+    }
+
+    private static void refactorLonMethods(Path path, JavaSymbolSolver symbolSolver) throws IOException {
+        String content = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+        CompilationUnit compilationUnit = getCompilationUnit(symbolSolver, content);
+        log.debug("Initial Methods: {}", countMethods(compilationUnit));
+        boolean refactored = false;
+        int round = 1;
         while (refactorLongMethod(compilationUnit)) {
             //re-init positions, set start and end lines to new added and modified methods
-            compilationUnit = JavaParser.parse(compilationUnit.toString());
+            compilationUnit = getCompilationUnit(symbolSolver, compilationUnit.toString());
+            refactored = true;
+            log.debug("Methods after round {} : {}", round, countMethods(compilationUnit));
+            round ++;
         }
-        System.out.println(compilationUnit);
+        if (refactored) {
+            Files.write(path, compilationUnit.toString().getBytes(StandardCharsets.UTF_8));
+        }
+
+    }
+
+    private static int countMethods(Node node){
+        return node.findAll(MethodDeclaration.class).size();
+    }
+
+    private static CompilationUnit getCompilationUnit(JavaSymbolSolver symbolSolver, String content) {
+        CompilationUnit compilationUnit = JavaParser.parse(content);
+        compilationUnit.setData(Node.SYMBOL_RESOLVER_KEY, symbolSolver);
+        return compilationUnit;
     }
 
     private static boolean refactorLongMethod(CompilationUnit compilationUnit) {
@@ -90,9 +136,11 @@ public class LongMethodRefactor {
         Expression replacingExpression = getReplacingExpression(candidate, newMethod);
 
         List<Statement> toReplace = candidate.statementsToReplace;
-        method.replace(toReplace.get(0), new ExpressionStmt(replacingExpression));
+        toReplace.get(0).replace(new ExpressionStmt(replacingExpression));
         for (int i = 1; i < toReplace.size(); i++) {
-            method.remove(toReplace.get(i));
+            Statement toRemove = toReplace.get(i);
+            Optional<Node> parent = toRemove.getParentNode();
+            parent.ifPresent(node -> node.remove(toRemove));
         }
     }
 
@@ -120,8 +168,9 @@ public class LongMethodRefactor {
         newMethod.setPrivate(true);
         newMethod.setStatic(method.isStatic());
         newMethod.setType(computeReurnType(candidate, method));
-        method.setParameters(new NodeList<>(computeParameters(candidate)));
-        List<Statement> newMethodStatements = new ArrayList<>(candidate.statementsToReplace);
+        newMethod.setParameters(new NodeList<>(computeParameters(candidate)));
+        List<Statement> newMethodStatements = candidate.statementsToReplace.stream().map(Statement::clone).collect(
+                Collectors.toList());
         if (candidate.valueToAssign != null) {
             ReturnStmt returnStmt = new ReturnStmt(new NameExpr(candidate.valueToAssign.getName()));
             newMethodStatements.add(returnStmt);
@@ -152,6 +201,12 @@ public class LongMethodRefactor {
         }
         if (declaration instanceof JavaParserParameterDeclaration) {
             return ((JavaParserParameterDeclaration) declaration).getWrappedNode().getType();
+        }
+        if(declaration instanceof JavaParserSymbolDeclaration){
+            Node node = ((JavaParserSymbolDeclaration) declaration).getWrappedNode();
+            if(node instanceof VariableDeclarator){
+                return ((VariableDeclarator) node).getType();
+            }
         }
         throw new IllegalArgumentException("Unsupported type: " + declaration);
     }
@@ -187,7 +242,7 @@ public class LongMethodRefactor {
             candidates.addAll(refactorLongStatement(child, childNextStatements));
         }
         for (int begin = 0; begin < children.size() - MIN_STATEMENTS; begin++) {
-            for (int end = begin + MIN_STATEMENTS - 1; end <= children.size(); end++) {
+            for (int end = begin + MIN_STATEMENTS - 1; end <= children.size() - 1; end++) {
                 Optional<RefactoringCandidate> candidate = getRefactoringCandidate(statement, nextStatements, children,
                         begin, end);
                 candidate.ifPresent(candidates::add);
@@ -201,7 +256,7 @@ public class LongMethodRefactor {
             List<Statement> children, int begin, int end) {
         //avoid moving entire method body to another method
         if (statement.getParentNode().isPresent() && statement.getParentNode().get() instanceof MethodDeclaration
-                && begin == 0 && end == children.size()) {
+                && begin == 0 && end == children.size() - 1) {
             return Optional.empty();
         }
         List<Statement> currentStatements = children.subList(begin, end + 1);
@@ -238,9 +293,18 @@ public class LongMethodRefactor {
 
     private static Set<ResolvedValueDeclaration> getParameters(List<? extends Node> nodes) {
         return nodes.stream().flatMap(node -> (node.findAll(NameExpr.class).stream()))
-                .map(NameExpr::resolve)
+                .map(LongMethodRefactor::resolveNameExpression)
+                .flatMap(valueDeclaration -> valueDeclaration.map(Stream::of).orElse(Stream.empty()))
                 .filter(declaration -> !isDeclaredIn(declaration, nodes))
                 .collect(Collectors.toSet());
+    }
+
+    private static Optional<ResolvedValueDeclaration> resolveNameExpression(NameExpr nameExpr){
+        try {
+            return Optional.of(nameExpr.resolve());
+        }catch (UnsolvedSymbolException ex){
+            return Optional.empty();
+        }
     }
 
     private static boolean isDeclaredIn(ResolvedValueDeclaration declaration, List<? extends Node> nodes) {
@@ -270,8 +334,8 @@ public class LongMethodRefactor {
     private static boolean isUsed(ResolvedValueDeclaration declaration, Node node) {
         if (node instanceof NameExpr) {
             NameExpr nameExpr = (NameExpr) node;
-            ResolvedValueDeclaration nameDeclaration = nameExpr.resolve();
-            return isSameValue(declaration, nameDeclaration);
+            Optional<ResolvedValueDeclaration> maybeNameDeclaration = resolveNameExpression(nameExpr);
+            return maybeNameDeclaration.map(nameDeclaration->isSameValue(declaration, nameDeclaration)).orElse(false);
         }
         return isUsed(declaration, node.getChildNodes());
     }
@@ -298,7 +362,7 @@ public class LongMethodRefactor {
     }
 
     private static boolean containsReturnChildNode(List<Statement> statements) {
-        return statements.stream().anyMatch(statement -> statement.findFirst(Statement.class).isPresent());
+        return statements.stream().anyMatch(statement -> statement.findFirst(ReturnStmt.class).isPresent());
     }
 
     private static List<Statement> getChildNextStatements(List<Statement> nextStatements, List<Statement> children,
