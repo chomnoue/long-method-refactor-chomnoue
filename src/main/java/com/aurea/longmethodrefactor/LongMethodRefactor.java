@@ -4,69 +4,38 @@ import com.github.javaparser.JavaParser;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.expr.AssignExpr.Operator;
-import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.VariableDeclarationExpr;
-import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.stmt.ExpressionStmt;
-import com.github.javaparser.ast.stmt.ReturnStmt;
-import com.github.javaparser.ast.stmt.Statement;
-import com.github.javaparser.ast.type.Type;
-import com.github.javaparser.ast.type.VoidType;
-import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
-import com.github.javaparser.utils.Utils;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 @Component
 @Slf4j
 public class LongMethodRefactor {
 
-    private static final String GET = "get";
     private static final String JAVA_SUFFIX = ".java";
-    private static final int MAX_SCORE_PARAM = 4;
-    private static final Pattern NAME_PATTERN = Pattern.compile("(.+)(\\d+)");
 
     private final int maxLength;
-    private final int maxScoreLength;
-    private final float lengthWeight;
     private final String srcPath;
     private final RefactoringCandidatesProvider candidatesProvider;
     private final ApplicableCandidateProvider applicableCandidateProvider;
 
-    LongMethodRefactor(@Value("${maxLength:30}") int maxLength, @Value("${maxScoreLength:3}") int maxScoreLength,
-            @Value("${lengthWeight:0.1}") float lengthWeight, @Value("${srcPath}") String srcPath,
+    LongMethodRefactor(@Value("${maxLength:30}") int maxLength, @Value("${srcPath}") String srcPath,
             RefactoringCandidatesProvider candidatesProvider,
             ApplicableCandidateProvider applicableCandidateProvider) {
         this.maxLength = maxLength;
-        this.maxScoreLength = maxScoreLength;
-        this.lengthWeight = lengthWeight;
         this.srcPath = srcPath;
         this.candidatesProvider = candidatesProvider;
         this.applicableCandidateProvider = applicableCandidateProvider;
@@ -135,8 +104,9 @@ public class LongMethodRefactor {
         if (length <= maxLength) {
             return false;
         }
-        List<RefactoringCandidate> candidates = method.getBody().map(body -> candidatesProvider.refactorLongStatement(body,
-                Collections.emptyList(), Collections.emptyList())).orElse(Collections.emptyList());
+        List<RefactoringCandidate> candidates = method.getBody()
+                .map(body -> candidatesProvider.refactorLongStatement(body,
+                        Collections.emptyList(), Collections.emptyList())).orElse(Collections.emptyList());
         Optional<ApplicableCandidate> bestRefactoring = applicableCandidateProvider
                 .chooseBestCandidate(candidates, method, type);
         if (bestRefactoring.isPresent()) {

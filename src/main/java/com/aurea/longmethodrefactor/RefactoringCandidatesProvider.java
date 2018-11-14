@@ -22,11 +22,8 @@ public class RefactoringCandidatesProvider {
     }
 
     private static Optional<RefactoringCandidate> getRefactoringCandidate(Statement statement,
-            List<Statement> nextStatements,
-            List<Statement> children, int begin, int end, List<Integer> candidatePath) {
-        //avoid moving entire method body to another method
-        if (statement.getParentNode().isPresent() && statement.getParentNode().get() instanceof MethodDeclaration
-                && begin == 0 && end == children.size() - 1) {
+            List<Statement> nextStatements, List<Statement> children, int begin, int end, List<Integer> candidatePath) {
+        if (isFullMethodBody(statement, children, begin, end)) { //avoid moving entire method body to another method
             return Optional.empty();
         }
         List<Statement> currentStatements = children.subList(begin, end + 1);
@@ -36,26 +33,39 @@ public class RefactoringCandidatesProvider {
         Optional<ReturnStmt> lastReturn = AstUtils.getLastReturnStatement(currentStatements);
         ResolvedValueDeclaration valueToAssign = null;
         if (!lastReturn.isPresent()) {
-            List<ResolvedValueDeclaration> declarations = ListUtils.union(AstUtils.getAssignedVariables(currentStatements),
-                    AstUtils.getDeclaredVariables(currentStatements));
+            List<ResolvedValueDeclaration> declarations = ListUtils
+                    .union(AstUtils.getAssignedVariables(currentStatements),
+                            AstUtils.getDeclaredVariables(currentStatements));
             List<Statement> currentNext = AstUtils.getChildNextStatements(nextStatements, children, end);
             for (ResolvedValueDeclaration declaration : declarations) {
                 if (AstUtils.isUsed(declaration, currentNext)) {
                     if (valueToAssign == null) {
                         valueToAssign = declaration;
-                    } else if (!AstUtils.isSameValue(valueToAssign, declaration)) {
-                        //too many values to return
-                        return Optional.empty();
+                        //TODO refactor this to avod deeply nested ifs
+                    } else if (!AstUtils.isSameValue(valueToAssign, declaration)) { //NOPMD
+                        return Optional.empty();//too many values to return
                     }
                 }
             }
         }
+        return buildRefactoringCandidate(begin, end, candidatePath, currentStatements, lastReturn.orElse(null),
+                valueToAssign);
+    }
+
+    private static boolean isFullMethodBody(Statement statement, List<Statement> children, int begin, int end) {
+        return statement.getParentNode().isPresent() && statement.getParentNode().get() instanceof MethodDeclaration
+                && begin == 0 && end == children.size() - 1;
+    }
+
+    private static Optional<RefactoringCandidate> buildRefactoringCandidate(int begin, int end,
+            List<Integer> candidatePath, List<Statement> currentStatements, ReturnStmt lastReturn,
+            ResolvedValueDeclaration valueToAssign) {
         Set<ResolvedValueDeclaration> parameters = AstUtils.getParameters(currentStatements);
         RefactoringCandidate refactoringCandidate = RefactoringCandidate.builder()
                 .firstStatement(begin)
                 .lastStatement(end)
                 .path(candidatePath)
-                .returnStmt(lastReturn.orElse(null))
+                .returnStmt(lastReturn)
                 .valueToAssign(valueToAssign)
                 .parameters(parameters)
                 .build();

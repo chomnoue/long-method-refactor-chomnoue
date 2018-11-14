@@ -19,7 +19,6 @@ import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.VoidType;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
-import com.github.javaparser.utils.Utils;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -28,12 +27,26 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
 public class ApplicableCandidateProvider {
+
+    private static final String GET = "get";
+    private static final Pattern NAME_PATTERN = Pattern.compile("(.+)(\\d+)");
+
+    private final int maxScoreLength;
+    private final float lengthWeight;
+
+    public ApplicableCandidateProvider(@Value("${maxScoreLength:3}") int maxScoreLength,
+            @Value("${lengthWeight:0.1}") float lengthWeight) {
+        this.maxScoreLength = maxScoreLength;
+        this.lengthWeight = lengthWeight;
+    }
 
     Optional<ApplicableCandidate> chooseBestCandidate(List<RefactoringCandidate> candidates,
             MethodDeclaration method, ClassOrInterfaceDeclaration type) {
@@ -47,7 +60,7 @@ public class ApplicableCandidateProvider {
         MethodDeclaration candidateMethod = generateNewMethod(candidate, type, method);
         MethodDeclaration remainingMethod = generateRemainingMethod(candidate, method, candidateMethod);
         float score = computeScore(method, candidateMethod, remainingMethod);
-        boolean reducesLength = reducesLength(method, candidateMethod, remainingMethod);
+        boolean reducesLength = ScoreUtils.reducesLength(method, candidateMethod, remainingMethod);
         return ApplicableCandidate.builder()
                 .candidateMethod(candidateMethod)
                 .remainingMethod(remainingMethod)
@@ -56,65 +69,19 @@ public class ApplicableCandidateProvider {
                 .build();
     }
 
-    private static boolean reducesLength(MethodDeclaration method, MethodDeclaration candidateMethod,
-            MethodDeclaration remainingMethod) {
-        int length = methodLength(method);
-        return length > methodLength(candidateMethod) && length > methodLength(remainingMethod);
-    }
-
     private float computeScore(MethodDeclaration method, MethodDeclaration candidateMethod,
             MethodDeclaration remainingMethod) {
         float lengthScore = lengthScore(candidateMethod, remainingMethod);
-        int nestDepthScore = nestingDepthSocre(method, candidateMethod, remainingMethod);
-        float nestAreaScore = nestingAreaScore(method, candidateMethod, remainingMethod);
-        int paramsScore = paramsScore(candidateMethod);
+        int nestDepthScore = ScoreUtils.nestingDepthSocre(method, candidateMethod, remainingMethod);
+        float nestAreaScore = ScoreUtils.nestingAreaScore(method, candidateMethod, remainingMethod);
+        int paramsScore = ScoreUtils.paramsScore(candidateMethod);
         return lengthScore + nestDepthScore + nestAreaScore + paramsScore;
     }
 
-    private static int paramsScore(MethodDeclaration candidateMethod) {
-        int returns = candidateMethod.getType() instanceof VoidType ? 0 : 1;
-        return MAX_SCORE_PARAM - returns - candidateMethod.getParameters().size();
-    }
-
-    private static int nestingDepthSocre(MethodDeclaration method, MethodDeclaration candidateMethod,
-            MethodDeclaration remainingMethod) {
-        int methodDepth = nestingDepth(method);
-        int candidateDepth = nestingDepth(candidateMethod);
-        int remainingDepth = nestingDepth(remainingMethod);
-        return Math.min(methodDepth - remainingDepth, methodDepth - candidateDepth);
-    }
-
-    private static float nestingAreaScore(MethodDeclaration method, MethodDeclaration candidateMethod,
-            MethodDeclaration remainingMethod) {
-        int methodNestArea = nestingArea(method);
-        int candidateNestingArea = nestingArea(candidateMethod);
-        int remainingNestArea = nestingArea(remainingMethod);
-        int areaReduction = Math.min(methodNestArea - candidateNestingArea, methodNestArea - remainingNestArea);
-        int methodDepth = nestingDepth(method);
-        return 2f * methodDepth * areaReduction / methodNestArea;
-    }
-
-    private static int nestingArea(MethodDeclaration methodDeclaration) {
-        return methodDeclaration.getBody().map(LongMethodRefactor::nestingArea).orElse(0);
-    }
-
-    private static int nestingArea(BlockStmt blockStmt) {
-        return blockStmt.getChildNodes().stream().mapToInt(LongMethodRefactor::nestingDepth).sum();
-    }
-
     private float lengthScore(MethodDeclaration candidateMethod, MethodDeclaration remainingMethod) {
-        int candidateLength = methodLength(candidateMethod);
-        int remainingLength = methodLength(remainingMethod);
+        int candidateLength = ScoreUtils.methodLength(candidateMethod);
+        int remainingLength = ScoreUtils.methodLength(remainingMethod);
         return Math.min(lengthWeight * Math.min(candidateLength, remainingLength), maxScoreLength);
-    }
-
-    private static int nestingDepth(Node node) {
-        int addedDepth = node instanceof BlockStmt ? 1 : 0;
-        return addedDepth + node.getChildNodes().stream().mapToInt(LongMethodRefactor::nestingDepth).max().orElse(0);
-    }
-
-    private static int methodLength(MethodDeclaration method) {
-        return method.toString().split(Utils.EOL).length;
     }
 
     private static MethodDeclaration generateRemainingMethod(RefactoringCandidate candidate, MethodDeclaration method,
@@ -142,8 +109,9 @@ public class ApplicableCandidateProvider {
             ResolvedValueDeclaration valueToAssign = candidate.getValueToAssign();
             List<Statement> statementsToReplace = getStatementsToReplace(candidate, method);
             if (AstUtils.isDeclaredIn(valueToAssign, statementsToReplace)) {
-                replacingExpression = new VariableDeclarationExpr(new VariableDeclarator(getType(valueToAssign),
-                        valueToAssign.getName(), methodCallExpr));
+                replacingExpression = new VariableDeclarationExpr(
+                        new VariableDeclarator(AstUtils.getType(valueToAssign),
+                                valueToAssign.getName(), methodCallExpr));
             } else {
                 replacingExpression = new AssignExpr(new NameExpr(valueToAssign.getName()), methodCallExpr,
                         Operator.ASSIGN);
@@ -158,7 +126,7 @@ public class ApplicableCandidateProvider {
         newMethod.setName(computeMethodName(candidate, type, method));
         newMethod.setPrivate(true);
         newMethod.setStatic(method.isStatic());
-        newMethod.setType(computeReurnType(candidate, method));
+        newMethod.setType(computeReturnType(candidate, method));
         newMethod.setParameters(new NodeList<>(computeParameters(candidate)));
         List<Statement> newMethodStatements =
                 getStatementsToReplace(candidate, method).stream().map(Statement::clone).collect(
@@ -186,33 +154,20 @@ public class ApplicableCandidateProvider {
     }
 
     private static Collection<Parameter> computeParameters(RefactoringCandidate candidate) {
-        return candidate.getParameters().stream().map(param -> new Parameter(getType(param), param.getName())).collect(
-                Collectors.toMap(Parameter::getNameAsString, Function.identity(), (p1, p2) -> p1)).values();
+        return candidate.getParameters().stream().map(param -> new Parameter(AstUtils.getType(param), param.getName()))
+                .collect(
+                        Collectors.toMap(Parameter::getNameAsString, Function.identity(), (p1, p2) -> p1)).values();
     }
 
-    private static Type computeReurnType(RefactoringCandidate candidate, MethodDeclaration method) {
+    private static Type computeReturnType(RefactoringCandidate candidate, MethodDeclaration method) {
         if (candidate.getValueToAssign() != null) {
             ResolvedValueDeclaration valueToAssign = candidate.getValueToAssign();
-            return getType(valueToAssign);
+            return AstUtils.getType(valueToAssign);
         }
         if (candidate.getReturnStmt() == null) {
             return new VoidType();
         }
         return method.getType();
-    }
-
-    private static Type getType(ResolvedValueDeclaration declaration) {
-        Node wrappedNode = AstUtils.getWrappedNode(declaration);
-        if (wrappedNode instanceof VariableDeclarationExpr) {
-            return ((VariableDeclarationExpr) wrappedNode).getCommonType();
-        }
-        if (wrappedNode instanceof Parameter) {
-            return ((Parameter) wrappedNode).getType();
-        }
-        if (wrappedNode instanceof VariableDeclarator) {
-            return ((VariableDeclarator) wrappedNode).getType();
-        }
-        throw new IllegalArgumentException("Unsupported node type: " + wrappedNode);
     }
 
     private static String computeMethodName(RefactoringCandidate candidate, ClassOrInterfaceDeclaration type,
@@ -227,7 +182,7 @@ public class ApplicableCandidateProvider {
         Matcher matcher = NAME_PATTERN.matcher(name);
         if (matcher.matches()) {
             name = matcher.group(1);
-            count = Integer.valueOf(matcher.group(2));
+            count = Integer.parseInt(matcher.group(2));
         }
         String newName = name;
         while (existingNames.contains(newName)) {

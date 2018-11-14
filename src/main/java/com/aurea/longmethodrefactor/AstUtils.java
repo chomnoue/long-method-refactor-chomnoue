@@ -1,12 +1,14 @@
 package com.aurea.longmethodrefactor;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserParameterDeclaration;
@@ -23,7 +25,7 @@ import org.apache.commons.collections4.ListUtils;
 @UtilityClass
 class AstUtils {
 
-    static Node getWrappedNode(ResolvedValueDeclaration declaration) {
+    private static Node getWrappedNode(ResolvedValueDeclaration declaration) {
         if (declaration instanceof JavaParserVariableDeclaration) {
             return ((JavaParserVariableDeclaration) declaration).getWrappedNode();
         }
@@ -54,7 +56,7 @@ class AstUtils {
     }
 
     private static boolean isDescendantOf(Node descendant, Node node) {
-        if (node == descendant) {
+        if (node.equals(descendant)) {
             return true;
         }
         return isDescendantOf(descendant, node.getChildNodes());
@@ -128,10 +130,24 @@ class AstUtils {
     }
 
     static Set<ResolvedValueDeclaration> getParameters(List<? extends Node> nodes) {
-        return nodes.stream().flatMap(node -> (node.findAll(NameExpr.class).stream()))
+        return nodes.stream().flatMap(node -> node.findAll(NameExpr.class).stream())
                 .map(AstUtils::resolveNameExpression)
                 .flatMap(valueDeclaration -> valueDeclaration.map(Stream::of).orElse(Stream.empty()))
                 .filter(declaration -> !isDeclaredIn(declaration, nodes))
                 .collect(Collectors.toSet());
+    }
+
+    static Type getType(ResolvedValueDeclaration declaration) {
+        Node wrappedNode = getWrappedNode(declaration);
+        if (wrappedNode instanceof VariableDeclarationExpr) {
+            return ((VariableDeclarationExpr) wrappedNode).getCommonType();
+        }
+        if (wrappedNode instanceof Parameter) {
+            return ((Parameter) wrappedNode).getType();
+        }
+        if (wrappedNode instanceof VariableDeclarator) {
+            return ((VariableDeclarator) wrappedNode).getType();
+        }
+        throw new IllegalArgumentException("Unsupported node type: " + wrappedNode);
     }
 }

@@ -7,6 +7,7 @@ buildscript {
     }
     dependencies {
         classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
+        classpath('de.aaschmid:gradle-cpd-plugin:1.0')
     }
 }
 
@@ -14,9 +15,14 @@ plugins{
     id "io.franzbecker.gradle-lombok" version "1.14"
 }
 apply plugin: 'java'
+apply plugin: 'groovy'
 apply plugin: 'eclipse'
 apply plugin: 'org.springframework.boot'
 apply plugin: 'io.spring.dependency-management'
+apply plugin: 'checkstyle'
+apply plugin: 'findbugs'
+apply plugin: 'pmd'
+apply plugin: 'cpd'
 
 group = 'com.aurea'
 version = '0.0.1-SNAPSHOT'
@@ -30,6 +36,44 @@ repositories {
 dependencies {
     implementation('org.springframework.boot:spring-boot-starter')
     implementation('com.github.javaparser:javaparser-symbol-solver-core:3.7.1')
-    compile group: 'org.apache.commons', name: 'commons-collections4', version: '4.2'
+    implementation('org.apache.commons:commons-collections4:4.2')
+    testImplementation('org.spockframework:spock-core:1.1-groovy-2.4')
     testImplementation('org.springframework.boot:spring-boot-starter-test')
 }
+
+checkstyle {
+    toolVersion = "7.6"
+    ignoreFailures = false
+    configFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
+}
+
+findbugs {
+    toolVersion = "3.0.1"
+    ignoreFailures = false
+    excludeFilter = file("${rootDir}/config/findbugs/excludeFilter.xml")
+}
+
+pmd {
+    ignoreFailures = false
+    rulePriority = 3 // 3 is recommended by QE team value
+    toolVersion = '5.5.4'
+    ruleSetFiles = files("${rootDir}/config/pmd/ruleset.xml")
+}
+
+// CPD settings - start
+cpd {
+    language = 'java'
+    toolVersion = '5.2.3'
+    minimumTokenCount = 100 // it approx. equals to 6-10 lines
+}
+
+cpdCheck {
+    reports {
+        text.enabled = false
+        xml.enabled = true
+    }
+    ignoreAnnotations = true
+    source = sourceSets.main.allJava // only java, groovy and scala classes in 'main' sourceSets
+}
+
+// CPD settings - end
