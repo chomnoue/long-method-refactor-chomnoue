@@ -54,7 +54,7 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
         }
         """, """
         package com.aurea.longmethod.refactor;
-        
+         
         import java.io.File;
         import java.util.logging.Logger;
         import org.apache.commons.cli.CommandLine;
@@ -64,18 +64,15 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
         import org.apache.commons.cli.Option;
         import org.apache.commons.cli.Options;
         import org.apache.commons.cli.ParseException;
-        
+         
         public class Test {
-        
+         
             public static void main(String[] args) throws Exception {
-                CommandLine cmd = getCmd(args);
-                String inputFilePath = cmd.getOptionValue("input");
-                String outputFilePath = cmd.getOptionValue("output");
-                System.out.println(inputFilePath);
-                System.out.println(outputFilePath);
+                Options options = getOptions();
+                main2(args, options);
             }
-        
-            private static Options getOptions() {
+         
+            private static Options getOptions() throws Exception {
                 Options options = new Options();
                 Option input = new Option("i", "input", true, "input file path");
                 input.setRequired(true);
@@ -85,25 +82,25 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
                 options.addOption(output);
                 return options;
             }
-        
-            private static CommandLine getCmd(String[] args) {
-                Options options = getOptions();
-                CommandLine cmd = getCmd1(args, options);
-                return cmd;
+         
+            private static void main1(CommandLine cmd) throws Exception {
+                String inputFilePath = cmd.getOptionValue("input");
+                String outputFilePath = cmd.getOptionValue("output");
+                System.out.println(inputFilePath);
+                System.out.println(outputFilePath);
             }
-        
-            private static CommandLine getCmd1(String[] args, Options options) {
+         
+            private static void main2(String[] args, Options options) throws Exception {
                 CommandLineParser parser = new DefaultParser();
-                CommandLine cmd = getCmd2(args, parser, options);
-                return cmd;
+                main3(args, parser, options);
             }
-        
-            private static CommandLine getCmd2(String[] args, CommandLineParser parser, Options options) {
+         
+            private static void main3(String[] args, CommandLineParser parser, Options options) throws Exception {
                 HelpFormatter formatter = new HelpFormatter();
-                return getCmd3(args, formatter, parser, options);
+                main4(formatter, args, parser, options);
             }
-        
-            private static CommandLine getCmd3(String[] args, HelpFormatter formatter, CommandLineParser parser, Options options) {
+         
+            private static void main4(HelpFormatter formatter, String[] args, CommandLineParser parser, Options options) throws Exception {
                 CommandLine cmd = null;
                 try {
                     cmd = parser.parse(options, args);
@@ -112,7 +109,7 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
                     formatter.printHelp("utility-name", options);
                     System.exit(1);
                 }
-                return cmd;
+                main1(cmd);
             }
         }
         """

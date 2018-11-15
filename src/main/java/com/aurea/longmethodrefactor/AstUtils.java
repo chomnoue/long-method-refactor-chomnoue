@@ -3,18 +3,23 @@ package com.aurea.longmethodrefactor;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserEnumConstantDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserFieldDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserParameterDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserSymbolDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserVariableDeclaration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -35,6 +40,12 @@ class AstUtils {
         }
         if (declaration instanceof JavaParserSymbolDeclaration) {
             return ((JavaParserSymbolDeclaration) declaration).getWrappedNode();
+        }
+        if (declaration instanceof JavaParserFieldDeclaration) {
+            return ((JavaParserFieldDeclaration) declaration).getWrappedNode();
+        }
+        if (declaration instanceof JavaParserEnumConstantDeclaration) {
+            return ((JavaParserEnumConstantDeclaration) declaration).getWrappedNode();
         }
         throw new IllegalArgumentException("Unsupported type: " + declaration);
     }
@@ -88,8 +99,19 @@ class AstUtils {
         return node;
     }
 
-    private static ResolvedValueDeclaration resolve(AssignExpr assignExpr) {
-        return assignExpr.getTarget().asNameExpr().resolve();
+    private static ResolvedValueDeclaration resolveTarget(AssignExpr assignExpr) {
+        Expression target = assignExpr.getTarget();
+        if (target instanceof Resolvable) {
+            try{
+                Object resolved = ((Resolvable) target).resolve();
+                if (resolved instanceof ResolvedValueDeclaration) {
+                    return (ResolvedValueDeclaration) resolved;
+                }
+            }catch (UnsolvedSymbolException e){
+                throw e;
+            }
+        }
+        throw new IllegalArgumentException("Unsupported target: " + target);
     }
 
     static Optional<ReturnStmt> getLastReturnStatement(List<Statement> currentStatements) {
@@ -112,7 +134,8 @@ class AstUtils {
 
     static List<Statement> getChildNextStatements(List<Statement> nextStatements, List<Statement> children,
             int idx) {
-        List<Statement> next = children.subList(Math.min(idx + 1, children.size() - 1), children.size());
+        List<Statement> next = children.size() <= idx + 1 ? Collections.emptyList() :
+                children.subList(idx + 1, children.size());
         return ListUtils.union(next, nextStatements);
     }
 
@@ -123,7 +146,8 @@ class AstUtils {
 
     static List<ResolvedValueDeclaration> getAssignedVariables(List<Statement> currentStatements) {
         return getNodesOfType(currentStatements, AssignExpr.class).stream()
-                .map(AstUtils::resolve).collect(Collectors.toList());
+                .filter(assignExpr -> !(assignExpr.getTarget() instanceof ArrayAccessExpr))
+                .map(AstUtils::resolveTarget).collect(Collectors.toList());
     }
 
     static List<ResolvedValueDeclaration> getDeclaredVariables(List<Statement> currentStatements) {
@@ -135,9 +159,14 @@ class AstUtils {
         return nodes.stream().flatMap(node -> node.findAll(NameExpr.class).stream())
                 .map(AstUtils::resolveNameExpression)
                 .flatMap(valueDeclaration -> valueDeclaration.map(Stream::of).orElse(Stream.empty()))
-                .filter(declaration -> !(declaration instanceof JavaParserFieldDeclaration))
+                .filter(AstUtils::isNotAField)
                 .filter(declaration -> !isDeclaredIn(declaration, nodes))
                 .collect(Collectors.toSet());
+    }
+
+    static boolean isNotAField(ResolvedValueDeclaration declaration) {
+        return !(declaration instanceof JavaParserFieldDeclaration ||
+                declaration instanceof JavaParserEnumConstantDeclaration);
     }
 
     static Type getType(ResolvedValueDeclaration declaration) {

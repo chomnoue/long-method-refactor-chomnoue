@@ -3,11 +3,13 @@ package com.aurea.longmethodrefactor;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchEntryStmt;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.commons.collections4.ListUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -27,7 +29,7 @@ public class RefactoringCandidatesProvider {
             return Optional.empty();
         }
         List<Statement> currentStatements = children.subList(begin, end + 1);
-        if (AstUtils.containsReturnChildNode(currentStatements)) {
+        if (isNotSupported(currentStatements)) {
             return Optional.empty();
         }
         Optional<ReturnStmt> lastReturn = AstUtils.getLastReturnStatement(currentStatements);
@@ -35,7 +37,8 @@ public class RefactoringCandidatesProvider {
         if (!lastReturn.isPresent()) {
             List<ResolvedValueDeclaration> declarations = ListUtils
                     .union(AstUtils.getAssignedVariables(currentStatements),
-                            AstUtils.getDeclaredVariables(currentStatements));
+                            AstUtils.getDeclaredVariables(currentStatements))
+                    .stream().filter(AstUtils::isNotAField).collect(Collectors.toList());
             List<Statement> currentNext = AstUtils.getChildNextStatements(nextStatements, children, end);
             for (ResolvedValueDeclaration declaration : declarations) {
                 if (AstUtils.isUsed(declaration, currentNext)) {
@@ -50,6 +53,16 @@ public class RefactoringCandidatesProvider {
         }
         return buildRefactoringCandidate(begin, end, candidatePath, currentStatements, lastReturn.orElse(null),
                 valueToAssign);
+    }
+
+    private static boolean isNotSupported(List<Statement> currentStatements) {
+        if (AstUtils.containsReturnChildNode(currentStatements)) {
+            return true;
+        }
+        if (currentStatements.stream().anyMatch(statement -> statement instanceof SwitchEntryStmt)) {
+            return true;
+        }
+        return false;
     }
 
     private static boolean isFullMethodBody(Statement statement, List<Statement> children, int begin, int end) {

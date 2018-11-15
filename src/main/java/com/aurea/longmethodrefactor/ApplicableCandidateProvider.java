@@ -16,6 +16,7 @@ import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.VoidType;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -131,6 +132,7 @@ public class ApplicableCandidateProvider {
         newMethod.setStatic(method.isStatic());
         newMethod.setType(computeReturnType(candidate, method));
         newMethod.setParameters(new NodeList<>(computeParameters(candidate)));
+        newMethod.setThrownExceptions(cloneThrownExceptions(method));
         List<Statement> newMethodStatements =
                 getStatementsToReplace(candidate, method).stream().map(Statement::clone).collect(
                         Collectors.toList());
@@ -140,6 +142,11 @@ public class ApplicableCandidateProvider {
         }
         newMethod.setBody(new BlockStmt(new NodeList<>(newMethodStatements)));
         return newMethod;
+    }
+
+    private static NodeList<ReferenceType> cloneThrownExceptions(MethodDeclaration method) {
+        return new NodeList<>(
+                method.getThrownExceptions().stream().map(ReferenceType::clone).collect(Collectors.toList()));
     }
 
     private static List<Statement> getStatementsToReplace(RefactoringCandidate candidate,
