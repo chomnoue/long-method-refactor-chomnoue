@@ -87,10 +87,10 @@ public class ApplicableCandidateProvider {
     private static MethodDeclaration generateRemainingMethod(RefactoringCandidate candidate, MethodDeclaration method,
             MethodDeclaration candidateMethod) {
         MethodDeclaration remainingMethod = method.clone();
-        Expression replacingExpression = getReplacingExpression(candidate, candidateMethod, method);
+        Statement replacingStatement = getReplacingExpression(candidate, candidateMethod, method);
 
         List<Statement> toReplace = getStatementsToReplace(candidate, remainingMethod);
-        toReplace.get(0).replace(new ExpressionStmt(replacingExpression));
+        toReplace.get(0).replace(replacingStatement);
         for (int i = 1; i < toReplace.size(); i++) {
             Statement toRemove = toReplace.get(i);
             Optional<Node> parent = toRemove.getParentNode();
@@ -99,12 +99,15 @@ public class ApplicableCandidateProvider {
         return remainingMethod;
     }
 
-    private static Expression getReplacingExpression(RefactoringCandidate candidate, MethodDeclaration newMethod,
+    private static Statement getReplacingExpression(RefactoringCandidate candidate, MethodDeclaration newMethod,
             MethodDeclaration method) {
         MethodCallExpr methodCallExpr = new MethodCallExpr(newMethod.getNameAsString(),
                 newMethod.getParameters().stream().map(Parameter::getName).map(NameExpr::new)
                         .toArray(NameExpr[]::new));
         Expression replacingExpression = methodCallExpr;
+        if (candidate.getReturnStmt() != null) {
+            return new ReturnStmt(methodCallExpr);
+        }
         if (candidate.getValueToAssign() != null) {
             ResolvedValueDeclaration valueToAssign = candidate.getValueToAssign();
             List<Statement> statementsToReplace = getStatementsToReplace(candidate, method);
@@ -117,7 +120,7 @@ public class ApplicableCandidateProvider {
                         Operator.ASSIGN);
             }
         }
-        return replacingExpression;
+        return new ExpressionStmt(replacingExpression);
     }
 
     private static MethodDeclaration generateNewMethod(RefactoringCandidate candidate, ClassOrInterfaceDeclaration type,

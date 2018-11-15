@@ -83,7 +83,7 @@ public class RefactoringCandidatesProvider {
             newPath.add(i);
             candidates.addAll(refactorLongStatement(child, childNextStatements, newPath));
         }
-        for (int begin = 0; begin < children.size() - minStatements; begin++) {
+        for (int begin = 0; begin <= children.size() - minStatements; begin++) {
             for (int end = begin + minStatements - 1; end <= children.size() - 1; end++) {
                 Optional<RefactoringCandidate> candidate = getRefactoringCandidate(statement, nextStatements, children,
                         begin, end, candidatePath);

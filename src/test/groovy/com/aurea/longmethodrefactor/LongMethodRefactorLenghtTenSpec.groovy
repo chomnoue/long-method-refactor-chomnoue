@@ -100,6 +100,10 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
         
             private static CommandLine getCmd2(String[] args, CommandLineParser parser, Options options) {
                 HelpFormatter formatter = new HelpFormatter();
+                return getCmd3(args, formatter, parser, options);
+            }
+        
+            private static CommandLine getCmd3(String[] args, HelpFormatter formatter, CommandLineParser parser, Options options) {
                 CommandLine cmd = null;
                 try {
                     cmd = parser.parse(options, args);
@@ -116,6 +120,6 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
 
     @Override
     LongMethodRefactor longMethodRefactor(String srcDir) {
-        return LongMethodRefactorSpec.longMethodRefactorWithLength(srcDir, 10)
+        return longMethodRefactorWithLength(srcDir, 10)
     }
 }

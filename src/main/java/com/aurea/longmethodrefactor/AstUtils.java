@@ -11,6 +11,7 @@ import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserFieldDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserParameterDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserSymbolDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserVariableDeclaration;
@@ -105,7 +106,8 @@ class AstUtils {
     }
 
     static boolean containsReturnChildNode(List<Statement> statements) {
-        return statements.stream().anyMatch(statement -> statement.findFirst(ReturnStmt.class).isPresent());
+        return statements.stream().flatMap(statement -> statement.getChildNodes().stream())
+                .anyMatch(statement -> statement.findFirst(ReturnStmt.class).isPresent());
     }
 
     static List<Statement> getChildNextStatements(List<Statement> nextStatements, List<Statement> children,
@@ -133,6 +135,7 @@ class AstUtils {
         return nodes.stream().flatMap(node -> node.findAll(NameExpr.class).stream())
                 .map(AstUtils::resolveNameExpression)
                 .flatMap(valueDeclaration -> valueDeclaration.map(Stream::of).orElse(Stream.empty()))
+                .filter(declaration -> !(declaration instanceof JavaParserFieldDeclaration))
                 .filter(declaration -> !isDeclaredIn(declaration, nodes))
                 .collect(Collectors.toSet());
     }
