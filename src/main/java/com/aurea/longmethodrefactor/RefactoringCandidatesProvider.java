@@ -1,11 +1,14 @@
 package com.aurea.longmethodrefactor;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.stmt.BreakStmt;
+import com.github.javaparser.ast.stmt.ContinueStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntryStmt;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -62,7 +65,26 @@ public class RefactoringCandidatesProvider {
         if (currentStatements.stream().anyMatch(statement -> statement instanceof SwitchEntryStmt)) {
             return true;
         }
+        if (breaksExternalLoop(currentStatements)) {
+            return true;
+        }
+        if (continuesExternalLoop(currentStatements)) {
+            return true;
+        }
+
         return false;
+    }
+
+    private static boolean breaksExternalLoop(List<Statement> currentStatements) {
+        List<BreakStmt> breakStmts = AstUtils.getNodesOfType(currentStatements, BreakStmt.class);
+        return breakStmts.stream().anyMatch(breakStmt -> AstUtils.getBreakParent(breakStmt)
+                .map(parent -> !AstUtils.isDescendantOf(parent, currentStatements)).orElse(true));
+    }
+
+    private static boolean continuesExternalLoop(List<Statement> currentStatements) {
+        List<ContinueStmt> continueStmts = AstUtils.getNodesOfType(currentStatements, ContinueStmt.class);
+        return continueStmts.stream().anyMatch(continueStmt -> AstUtils.getContinueParent(continueStmt)
+                .map(parent -> !AstUtils.isDescendantOf(parent, currentStatements)).orElse(true));
     }
 
     private static boolean isFullMethodBody(Statement statement, List<Statement> children, int begin, int end) {
@@ -74,6 +96,10 @@ public class RefactoringCandidatesProvider {
             List<Integer> candidatePath, List<Statement> currentStatements, ReturnStmt lastReturn,
             ResolvedValueDeclaration valueToAssign) {
         Set<ResolvedValueDeclaration> parameters = AstUtils.getParameters(currentStatements);
+        if (parameters.stream()
+                .anyMatch(param -> !AstUtils.isAssignedOnDeclaration(param))) {
+            return Optional.empty(); //value to assign might not have been initialized
+        }
         RefactoringCandidate refactoringCandidate = RefactoringCandidate.builder()
                 .firstStatement(begin)
                 .lastStatement(end)
@@ -87,6 +113,9 @@ public class RefactoringCandidatesProvider {
 
     List<RefactoringCandidate> refactorLongStatement(Statement statement,
             List<Statement> nextStatements, List<Integer> candidatePath) {
+        if (statement.isTryStmt() && !statement.asTryStmt().getCatchClauses().isEmpty()) {
+            return Collections.emptyList();
+        }
         List<Statement> children = AstUtils.getStatementChildren(statement);
         List<RefactoringCandidate> candidates = new ArrayList<>();
         for (int i = 0; i < children.size(); i++) {

@@ -1,5 +1,6 @@
 package com.aurea.longmethodrefactor;
 
+import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -23,6 +24,7 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -94,6 +96,9 @@ public class ApplicableCandidateProvider {
         toReplace.get(0).replace(replacingStatement);
         for (int i = 1; i < toReplace.size(); i++) {
             Statement toRemove = toReplace.get(i);
+            if (toRemove.isReturnStmt() && !toRemove.asReturnStmt().getExpression().isPresent()) {
+                continue;
+            }
             Optional<Node> parent = toRemove.getParentNode();
             parent.ifPresent(node -> node.remove(toRemove));
         }
@@ -106,22 +111,42 @@ public class ApplicableCandidateProvider {
                 newMethod.getParameters().stream().map(Parameter::getName).map(NameExpr::new)
                         .toArray(NameExpr[]::new));
         Expression replacingExpression = methodCallExpr;
-        if (candidate.getReturnStmt() != null) {
+        if (candidate.getReturnStmt() != null && candidate.getReturnStmt().getExpression().isPresent()) {
             return new ReturnStmt(methodCallExpr);
         }
         if (candidate.getValueToAssign() != null) {
             ResolvedValueDeclaration valueToAssign = candidate.getValueToAssign();
             List<Statement> statementsToReplace = getStatementsToReplace(candidate, method);
             if (AstUtils.isDeclaredIn(valueToAssign, statementsToReplace)) {
-                replacingExpression = new VariableDeclarationExpr(
-                        new VariableDeclarator(AstUtils.getType(valueToAssign),
-                                valueToAssign.getName(), methodCallExpr));
+                VariableDeclarator variableDeclarator = new VariableDeclarator(AstUtils.getType(valueToAssign),
+                        valueToAssign.getName(), methodCallExpr);
+                List<VariableDeclarator> otherDeclarators = getOtherDeclarators(valueToAssign);
+                NodeList<VariableDeclarator> declarators = new NodeList<>(otherDeclarators);
+                declarators.add(variableDeclarator);
+                EnumSet<Modifier> modifiers = AstUtils.getModifiers(valueToAssign);
+                replacingExpression = new VariableDeclarationExpr(modifiers, declarators);
             } else {
                 replacingExpression = new AssignExpr(new NameExpr(valueToAssign.getName()), methodCallExpr,
                         Operator.ASSIGN);
             }
         }
         return new ExpressionStmt(replacingExpression);
+    }
+
+    private static List<VariableDeclarator> getOtherDeclarators(ResolvedValueDeclaration valueToAssign) {
+        Node declarationNode = AstUtils.getWrappedNode(valueToAssign);
+        return declarationNode.getParentNode()
+                .map(ApplicableCandidateProvider::getDeclarators).orElse(Collections.emptyList())
+                .stream()
+                .filter(declarator -> !declarator.equals(declarationNode))
+                .collect(Collectors.toList());
+    }
+
+    private static List<VariableDeclarator> getDeclarators(Node node) {
+        if (node instanceof VariableDeclarationExpr) {
+            return ((VariableDeclarationExpr) node).getVariables();
+        }
+        return Collections.emptyList();
     }
 
     private static MethodDeclaration generateNewMethod(RefactoringCandidate candidate, ClassOrInterfaceDeclaration type,
@@ -136,6 +161,10 @@ public class ApplicableCandidateProvider {
         List<Statement> newMethodStatements =
                 getStatementsToReplace(candidate, method).stream().map(Statement::clone).collect(
                         Collectors.toList());
+        Statement lastStatement = newMethodStatements.get(newMethodStatements.size() - 1);
+        if (lastStatement.isReturnStmt() && !lastStatement.asReturnStmt().getExpression().isPresent()) {
+            newMethodStatements.remove(lastStatement);
+        }
         if (candidate.getValueToAssign() != null) {
             ReturnStmt returnStmt = new ReturnStmt(new NameExpr(candidate.getValueToAssign().getName()));
             newMethodStatements.add(returnStmt);
@@ -145,8 +174,8 @@ public class ApplicableCandidateProvider {
     }
 
     private static NodeList<ReferenceType> cloneThrownExceptions(MethodDeclaration method) {
-        return new NodeList<>(
-                method.getThrownExceptions().stream().map(ReferenceType::clone).collect(Collectors.toList()));
+        return method.getThrownExceptions().stream().map(ReferenceType::clone)
+                .collect(Collectors.toCollection(NodeList::new));
     }
 
     private static List<Statement> getStatementsToReplace(RefactoringCandidate candidate,

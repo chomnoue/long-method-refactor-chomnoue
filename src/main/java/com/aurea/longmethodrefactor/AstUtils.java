@@ -1,5 +1,6 @@
 package com.aurea.longmethodrefactor;
 
+import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -8,8 +9,14 @@ import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.stmt.BreakStmt;
+import com.github.javaparser.ast.stmt.ContinueStmt;
+import com.github.javaparser.ast.stmt.DoStmt;
+import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchStmt;
+import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -19,7 +26,9 @@ import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParse
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserParameterDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserSymbolDeclaration;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserVariableDeclaration;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -31,7 +40,7 @@ import org.apache.commons.collections4.ListUtils;
 @UtilityClass
 class AstUtils {
 
-    private static Node getWrappedNode(ResolvedValueDeclaration declaration) {
+    static Node getWrappedNode(ResolvedValueDeclaration declaration) {
         if (declaration instanceof JavaParserVariableDeclaration) {
             return ((JavaParserVariableDeclaration) declaration).getWrappedNode();
         }
@@ -63,7 +72,7 @@ class AstUtils {
         return isDescendantOf(wrappedNode, nodes);
     }
 
-    private static boolean isDescendantOf(Node descendant, List<? extends Node> nodes) {
+    static boolean isDescendantOf(Node descendant, List<? extends Node> nodes) {
         return nodes.stream().anyMatch(node -> isDescendantOf(descendant, node));
     }
 
@@ -102,13 +111,9 @@ class AstUtils {
     private static ResolvedValueDeclaration resolveTarget(AssignExpr assignExpr) {
         Expression target = assignExpr.getTarget();
         if (target instanceof Resolvable) {
-            try{
-                Object resolved = ((Resolvable) target).resolve();
-                if (resolved instanceof ResolvedValueDeclaration) {
-                    return (ResolvedValueDeclaration) resolved;
-                }
-            }catch (UnsolvedSymbolException e){
-                throw e;
+            Object resolved = ((Resolvable) target).resolve();
+            if (resolved instanceof ResolvedValueDeclaration) {
+                return (ResolvedValueDeclaration) resolved;
             }
         }
         throw new IllegalArgumentException("Unsupported target: " + target);
@@ -122,9 +127,32 @@ class AstUtils {
         return Optional.of(currentStatements.get(currentStatements.size() - 1).asReturnStmt());
     }
 
-    private static <T extends Node> List<T> getNodesOfType(List<Statement> currentStatements, Class<T> type) {
+    static <T extends Node> List<T> getNodesOfType(List<Statement> currentStatements, Class<T> type) {
         return currentStatements.stream().flatMap(statement -> statement.findAll(type).stream()).collect(
                 Collectors.toList());
+    }
+
+    static Optional<Statement> getBreakParent(BreakStmt breakStmt) {
+        return getAncestorOfType(breakStmt,
+                Arrays.asList(ForStmt.class, SwitchStmt.class, DoStmt.class, WhileStmt.class));
+    }
+
+    static Optional<Statement> getContinueParent(ContinueStmt continueStmt) {
+        return getAncestorOfType(continueStmt,
+                Arrays.asList(ForStmt.class, DoStmt.class, WhileStmt.class));
+    }
+
+    private static Optional<Statement> getAncestorOfType(Node node, List<Class<? extends Statement>> candidates) {
+        Optional<Node> maybeParent = node.getParentNode();
+        if (maybeParent.isPresent()) {
+            Node parent = maybeParent.get();
+            for (Class<? extends Statement> candidateType : candidates) {
+                if (candidateType.isInstance(parent)) {
+                    return Optional.of((Statement) parent);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     static boolean containsReturnChildNode(List<Statement> statements) {
@@ -182,4 +210,39 @@ class AstUtils {
         }
         throw new IllegalArgumentException("Unsupported node type: " + wrappedNode);
     }
+
+    static boolean isAssignedOnDeclaration(ResolvedValueDeclaration param) {
+        Node wrappedNode = getWrappedNode(param);
+        if (wrappedNode instanceof VariableDeclarator) {
+            return isAssignedOnDeclaration((VariableDeclarator) wrappedNode);
+        }
+        if (wrappedNode instanceof VariableDeclarationExpr) {
+            return ((VariableDeclarationExpr) wrappedNode).getVariables().stream()
+                    .allMatch(AstUtils::isAssignedOnDeclaration);
+        }
+        return true;
+    }
+
+    private static boolean isAssignedOnDeclaration(VariableDeclarator variableDeclarator) {
+        return variableDeclarator.getInitializer().isPresent();
+    }
+
+    static EnumSet<Modifier> getModifiers(ResolvedValueDeclaration declaration) {
+        Node wrappedNode = getWrappedNode(declaration);
+        if (wrappedNode instanceof VariableDeclarationExpr) {
+            return getModifiers((VariableDeclarationExpr) wrappedNode);
+        }
+        if(wrappedNode instanceof VariableDeclarator){
+            Optional<Node> maybeParent = wrappedNode.getParentNode();
+            if(maybeParent.isPresent() && maybeParent.get() instanceof VariableDeclarationExpr){
+                return getModifiers((VariableDeclarationExpr)maybeParent.get());
+            }
+        }
+        throw new IllegalArgumentException("Unsupported declaration: " + declaration);
+    }
+
+    private static EnumSet<Modifier> getModifiers(VariableDeclarationExpr declaration) {
+        return EnumSet.copyOf(declaration.getModifiers());
+    }
+
 }
