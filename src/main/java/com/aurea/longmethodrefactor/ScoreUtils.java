@@ -23,6 +23,10 @@ public class ScoreUtils {
         return MAX_SCORE_PARAM - returns - candidateMethod.getParameters().size();
     }
 
+    static boolean isLengthEnough(MethodDeclaration method, int minLength){
+        return methodLength(method)>=minLength;
+    }
+
     static int nestingDepthSocre(MethodDeclaration method, MethodDeclaration candidateMethod,
             MethodDeclaration remainingMethod) {
         int methodDepth = nestingDepth(method);

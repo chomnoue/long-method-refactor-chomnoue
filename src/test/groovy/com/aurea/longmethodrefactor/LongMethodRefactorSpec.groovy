@@ -40,7 +40,7 @@ abstract class LongMethodRefactorSpec extends Specification {
 
     static LongMethodRefactor longMethodRefactorWithLength(String srcDir, int maxLength) {
         RefactoringCandidatesProvider candidatesProvider = new RefactoringCandidatesProvider(3)
-        ApplicableCandidateProvider applicableCandidateProvider = new ApplicableCandidateProvider(3, 0.1)
+        ApplicableCandidateProvider applicableCandidateProvider = new ApplicableCandidateProvider(3, 0.1, 6)
         return new LongMethodRefactor(maxLength, srcDir, candidatesProvider, applicableCandidateProvider)
     }
 

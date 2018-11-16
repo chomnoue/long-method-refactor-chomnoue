@@ -44,17 +44,20 @@ public class ApplicableCandidateProvider {
 
     private final int maxScoreLength;
     private final float lengthWeight;
+    private final int minMethodLength;
 
     public ApplicableCandidateProvider(@Value("${maxScoreLength:3}") int maxScoreLength,
-            @Value("${lengthWeight:0.1}") float lengthWeight) {
+            @Value("${lengthWeight:0.1}") float lengthWeight, @Value("${minMethodLength:6}") int minMethodLength) {
         this.maxScoreLength = maxScoreLength;
         this.lengthWeight = lengthWeight;
+        this.minMethodLength = minMethodLength;
     }
 
     Optional<ApplicableCandidate> chooseBestCandidate(List<RefactoringCandidate> candidates,
             MethodDeclaration method, ClassOrInterfaceDeclaration type) {
         return candidates.stream().map(candidate -> computeNewMethodAndScore(candidate, type, method))
                 .filter(ApplicableCandidate::isReducesLength)
+                .filter(candidate -> ScoreUtils.isLengthEnough(candidate.getRemainingMethod(), minMethodLength))
                 .max(Comparator.comparing(ApplicableCandidate::getScore));
     }
 
