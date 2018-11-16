@@ -1,5 +1,7 @@
-package com.aurea.longmethodrefactor;
+package com.aurea.longmethod.refactor;
 
+import com.aurea.longmethod.refactor.utils.AstUtils;
+import com.aurea.longmethod.refactor.utils.ResolveUtils;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.stmt.BreakStmt;
 import com.github.javaparser.ast.stmt.ContinueStmt;
@@ -57,8 +59,8 @@ public class RefactoringCandidatesProvider {
 
     private static boolean shouldBeAssined(Statement statement, List<Statement> currentNext,
             ResolvedValueDeclaration declaration) {
-        return AstUtils.isUsed(declaration, currentNext) ||
-                AstUtils.isDeclaredOutsideLoop(declaration, statement);
+        return AstUtils.isUsed(declaration, currentNext)
+                || ResolveUtils.isDeclaredOutsideLoop(declaration, statement);
     }
 
     private static List<ResolvedValueDeclaration> getDeclarations(List<Statement> currentStatements) {
@@ -87,13 +89,13 @@ public class RefactoringCandidatesProvider {
     private static boolean breaksExternalLoop(List<Statement> currentStatements) {
         List<BreakStmt> breakStmts = AstUtils.getNodesOfType(currentStatements, BreakStmt.class);
         return breakStmts.stream().anyMatch(breakStmt -> AstUtils.getBreakParent(breakStmt)
-                .map(parent -> !AstUtils.isDescendantOf(parent, currentStatements)).orElse(true));
+                .map(parent -> !ResolveUtils.isDescendantOf(parent, currentStatements)).orElse(true));
     }
 
     private static boolean continuesExternalLoop(List<Statement> currentStatements) {
         List<ContinueStmt> continueStmts = AstUtils.getNodesOfType(currentStatements, ContinueStmt.class);
         return continueStmts.stream().anyMatch(continueStmt -> AstUtils.getContinueParent(continueStmt)
-                .map(parent -> !AstUtils.isDescendantOf(parent, currentStatements)).orElse(true));
+                .map(parent -> !ResolveUtils.isDescendantOf(parent, currentStatements)).orElse(true));
     }
 
     private static boolean isFullMethodBody(Statement statement, List<Statement> children, int begin, int end) {

@@ -1,4 +1,4 @@
-package com.aurea.longmethodrefactor;
+package com.aurea.longmethod.refactor;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
 import lombok.Builder;

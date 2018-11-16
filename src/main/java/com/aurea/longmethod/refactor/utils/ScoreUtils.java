@@ -1,4 +1,4 @@
-package com.aurea.longmethodrefactor;
+package com.aurea.longmethod.refactor.utils;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -8,26 +8,26 @@ import com.github.javaparser.utils.Utils;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
-class ScoreUtils {
+public class ScoreUtils {
 
     private static final int MAX_SCORE_PARAM = 4;
 
-    static boolean reducesLength(MethodDeclaration method, MethodDeclaration candidateMethod,
+    public static boolean reducesLength(MethodDeclaration method, MethodDeclaration candidateMethod,
             MethodDeclaration remainingMethod) {
         int length = methodLength(method);
         return length > methodLength(candidateMethod) && length > methodLength(remainingMethod);
     }
 
-    static int paramsScore(MethodDeclaration candidateMethod) {
+    public static int paramsScore(MethodDeclaration candidateMethod) {
         int returns = candidateMethod.getType() instanceof VoidType ? 0 : 1;
         return MAX_SCORE_PARAM - returns - candidateMethod.getParameters().size();
     }
 
-    static boolean isLengthEnough(MethodDeclaration method, int minLength){
-        return methodLength(method)>=minLength;
+    public static boolean isLengthEnough(MethodDeclaration method, int minLength) {
+        return methodLength(method) >= minLength;
     }
 
-    static int nestingDepthSocre(MethodDeclaration method, MethodDeclaration candidateMethod,
+    public static int nestingDepthSocre(MethodDeclaration method, MethodDeclaration candidateMethod,
             MethodDeclaration remainingMethod) {
         int methodDepth = nestingDepth(method);
         int candidateDepth = nestingDepth(candidateMethod);
@@ -35,7 +35,7 @@ class ScoreUtils {
         return Math.min(methodDepth - remainingDepth, methodDepth - candidateDepth);
     }
 
-    static float nestingAreaScore(MethodDeclaration method, MethodDeclaration candidateMethod,
+    public static float nestingAreaScore(MethodDeclaration method, MethodDeclaration candidateMethod,
             MethodDeclaration remainingMethod) {
         int methodNestArea = nestingArea(method);
         int candidateNestingArea = nestingArea(candidateMethod);
@@ -59,7 +59,7 @@ class ScoreUtils {
                 .orElse(0);
     }
 
-    static int methodLength(MethodDeclaration method) {
+    public static int methodLength(MethodDeclaration method) {
         return method.toString().split(Utils.EOL).length;
     }
 }

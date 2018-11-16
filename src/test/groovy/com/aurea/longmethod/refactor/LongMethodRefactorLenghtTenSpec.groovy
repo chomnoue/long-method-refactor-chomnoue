@@ -1,4 +1,4 @@
-package com.aurea.longmethodrefactor
+package com.aurea.longmethod.refactor
 
 
 class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
@@ -69,7 +69,9 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
          
             public static void main(String[] args) throws Exception {
                 Options options = getOptions();
-                main2(args, options);
+                CommandLineParser parser = new DefaultParser();
+                CommandLine cmd = getCmd(args, parser, options);
+                main1(cmd);
             }
          
             private static Options getOptions() throws Exception {
@@ -90,17 +92,8 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
                 System.out.println(outputFilePath);
             }
          
-            private static void main2(String[] args, Options options) throws Exception {
-                CommandLineParser parser = new DefaultParser();
-                main3(args, parser, options);
-            }
-         
-            private static void main3(String[] args, CommandLineParser parser, Options options) throws Exception {
+            private static CommandLine getCmd(String[] args, CommandLineParser parser, Options options) throws Exception {
                 HelpFormatter formatter = new HelpFormatter();
-                main4(formatter, args, parser, options);
-            }
-         
-            private static void main4(HelpFormatter formatter, String[] args, CommandLineParser parser, Options options) throws Exception {
                 CommandLine cmd = null;
                 try {
                     cmd = parser.parse(options, args);
@@ -109,7 +102,7 @@ class LongMethodRefactorLenghtTenSpec extends LongMethodRefactorSpec{
                     formatter.printHelp("utility-name", options);
                     System.exit(1);
                 }
-                main1(cmd);
+                return cmd;
             }
         }
         """

@@ -1,4 +1,4 @@
-package com.aurea.longmethodrefactor;
+package com.aurea.longmethod.refactor;
 
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;

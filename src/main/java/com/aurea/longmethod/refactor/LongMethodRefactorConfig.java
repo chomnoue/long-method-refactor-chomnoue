@@ -1,4 +1,4 @@
-package com.aurea.longmethodrefactor;
+package com.aurea.longmethod.refactor;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;

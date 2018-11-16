@@ -1,5 +1,8 @@
-package com.aurea.longmethodrefactor;
+package com.aurea.longmethod.refactor;
 
+import com.aurea.longmethod.refactor.utils.AstUtils;
+import com.aurea.longmethod.refactor.utils.ResolveUtils;
+import com.aurea.longmethod.refactor.utils.ScoreUtils;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -113,14 +116,14 @@ public class ApplicableCandidateProvider {
         MethodCallExpr methodCallExpr = new MethodCallExpr(newMethod.getNameAsString(),
                 newMethod.getParameters().stream().map(Parameter::getName).map(NameExpr::new)
                         .toArray(NameExpr[]::new));
-        Expression replacingExpression = methodCallExpr;
         if (candidate.getReturnStmt() != null && candidate.getReturnStmt().getExpression().isPresent()) {
             return new ReturnStmt(methodCallExpr);
         }
+        Expression replacingExpression = methodCallExpr;
         if (candidate.getValueToAssign() != null) {
             ResolvedValueDeclaration valueToAssign = candidate.getValueToAssign();
             List<Statement> statementsToReplace = getStatementsToReplace(candidate, method);
-            if (AstUtils.isDeclaredIn(valueToAssign, statementsToReplace)) {
+            if (ResolveUtils.isDeclaredIn(valueToAssign, statementsToReplace)) {
                 VariableDeclarator variableDeclarator = new VariableDeclarator(AstUtils.getType(valueToAssign),
                         valueToAssign.getName(), methodCallExpr);
                 List<VariableDeclarator> otherDeclarators = getOtherDeclarators(valueToAssign);
@@ -137,7 +140,7 @@ public class ApplicableCandidateProvider {
     }
 
     private static List<VariableDeclarator> getOtherDeclarators(ResolvedValueDeclaration valueToAssign) {
-        Node declarationNode = AstUtils.getWrappedNode(valueToAssign);
+        Node declarationNode = ResolveUtils.getWrappedNode(valueToAssign);
         return declarationNode.getParentNode()
                 .map(ApplicableCandidateProvider::getDeclarators).orElse(Collections.emptyList())
                 .stream()
