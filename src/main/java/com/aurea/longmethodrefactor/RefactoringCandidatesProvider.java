@@ -38,13 +38,10 @@ public class RefactoringCandidatesProvider {
         Optional<ReturnStmt> lastReturn = AstUtils.getLastReturnStatement(currentStatements);
         ResolvedValueDeclaration valueToAssign = null;
         if (!lastReturn.isPresent()) {
-            List<ResolvedValueDeclaration> declarations = ListUtils
-                    .union(AstUtils.getAssignedVariables(currentStatements),
-                            AstUtils.getDeclaredVariables(currentStatements))
-                    .stream().filter(AstUtils::isNotAField).collect(Collectors.toList());
+            List<ResolvedValueDeclaration> declarations = getDeclarations(currentStatements);
             List<Statement> currentNext = AstUtils.getChildNextStatements(nextStatements, children, end);
             for (ResolvedValueDeclaration declaration : declarations) {
-                if (AstUtils.isUsed(declaration, currentNext)) {
+                if (shouldBeAssined(statement, currentNext, declaration)) {
                     if (valueToAssign == null) {
                         valueToAssign = declaration;
                         //TODO refactor this to avod deeply nested ifs
@@ -56,6 +53,21 @@ public class RefactoringCandidatesProvider {
         }
         return buildRefactoringCandidate(begin, end, candidatePath, currentStatements, lastReturn.orElse(null),
                 valueToAssign);
+    }
+
+    private static boolean shouldBeAssined(Statement statement, List<Statement> currentNext,
+            ResolvedValueDeclaration declaration) {
+        return AstUtils.isUsed(declaration, currentNext) ||
+                AstUtils.isDeclaredOutsideLoop(declaration, statement);
+    }
+
+    private static List<ResolvedValueDeclaration> getDeclarations(List<Statement> currentStatements) {
+        List<ResolvedValueDeclaration> assignedVariables = AstUtils.getAssignedVariables(currentStatements);
+        List<ResolvedValueDeclaration> unaryAssignedVariables = AstUtils.getUnaryAssignedVariables(currentStatements);
+        List<ResolvedValueDeclaration> declaredVariables = AstUtils.getDeclaredVariables(currentStatements);
+        List<ResolvedValueDeclaration> variables = ListUtils.union(assignedVariables, unaryAssignedVariables);
+        variables = ListUtils.union(variables, declaredVariables);
+        return variables.stream().filter(AstUtils::isNotAField).collect(Collectors.toList());
     }
 
     private static boolean isNotSupported(List<Statement> currentStatements) {

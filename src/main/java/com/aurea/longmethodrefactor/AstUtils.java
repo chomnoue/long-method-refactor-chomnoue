@@ -1,5 +1,10 @@
 package com.aurea.longmethodrefactor;
 
+import static com.github.javaparser.ast.expr.UnaryExpr.Operator.POSTFIX_DECREMENT;
+import static com.github.javaparser.ast.expr.UnaryExpr.Operator.POSTFIX_INCREMENT;
+import static com.github.javaparser.ast.expr.UnaryExpr.Operator.PREFIX_DECREMENT;
+import static com.github.javaparser.ast.expr.UnaryExpr.Operator.PREFIX_INCREMENT;
+
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.Parameter;
@@ -8,11 +13,13 @@ import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.BreakStmt;
 import com.github.javaparser.ast.stmt.ContinueStmt;
 import com.github.javaparser.ast.stmt.DoStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
+import com.github.javaparser.ast.stmt.LabeledStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchStmt;
@@ -39,6 +46,9 @@ import org.apache.commons.collections4.ListUtils;
 
 @UtilityClass
 class AstUtils {
+
+    private static final EnumSet<UnaryExpr.Operator> UNARY_ASSIGN_OPERATORS = EnumSet.of(PREFIX_INCREMENT,
+            PREFIX_DECREMENT, POSTFIX_INCREMENT, POSTFIX_DECREMENT);
 
     static Node getWrappedNode(ResolvedValueDeclaration declaration) {
         if (declaration instanceof JavaParserVariableDeclaration) {
@@ -109,7 +119,14 @@ class AstUtils {
     }
 
     private static ResolvedValueDeclaration resolveTarget(AssignExpr assignExpr) {
-        Expression target = assignExpr.getTarget();
+        return resolveTargetExpression(assignExpr.getTarget());
+    }
+
+    private static ResolvedValueDeclaration resolveTarget(UnaryExpr unaryExpr) {
+        return resolveTargetExpression(unaryExpr.getExpression());
+    }
+
+    private static ResolvedValueDeclaration resolveTargetExpression(Expression target) {
         if (target instanceof Resolvable) {
             Object resolved = ((Resolvable) target).resolve();
             if (resolved instanceof ResolvedValueDeclaration) {
@@ -133,13 +150,31 @@ class AstUtils {
     }
 
     static Optional<Statement> getBreakParent(BreakStmt breakStmt) {
+        if (breakStmt.getLabel().isPresent()) {
+            return getAncestorWithLabel(breakStmt, breakStmt.getLabel().get().asString());
+        }
         return getAncestorOfType(breakStmt,
                 Arrays.asList(ForStmt.class, SwitchStmt.class, DoStmt.class, WhileStmt.class));
     }
 
     static Optional<Statement> getContinueParent(ContinueStmt continueStmt) {
+        if (continueStmt.getLabel().isPresent()) {
+            return getAncestorWithLabel(continueStmt, continueStmt.getLabel().get().asString());
+        }
         return getAncestorOfType(continueStmt,
                 Arrays.asList(ForStmt.class, DoStmt.class, WhileStmt.class));
+    }
+
+    private static Optional<Statement> getAncestorWithLabel(Node node, String label) {
+        Optional<Statement> maybeLabeled = getAncestorOfType(node, Collections.singletonList(LabeledStmt.class));
+        if (maybeLabeled.isPresent()) {
+            LabeledStmt labeledParent = (LabeledStmt) maybeLabeled.get();
+            if (label.equals(labeledParent.getLabel().asString())) {
+                return Optional.of(labeledParent);
+            }
+            return getAncestorWithLabel(labeledParent, label);
+        }
+        return Optional.empty();
     }
 
     private static Optional<Statement> getAncestorOfType(Node node, List<Class<? extends Statement>> candidates) {
@@ -151,6 +186,7 @@ class AstUtils {
                     return Optional.of((Statement) parent);
                 }
             }
+            return getAncestorOfType(parent, candidates);
         }
         return Optional.empty();
     }
@@ -175,6 +211,13 @@ class AstUtils {
     static List<ResolvedValueDeclaration> getAssignedVariables(List<Statement> currentStatements) {
         return getNodesOfType(currentStatements, AssignExpr.class).stream()
                 .filter(assignExpr -> !(assignExpr.getTarget() instanceof ArrayAccessExpr))
+                .map(AstUtils::resolveTarget).collect(Collectors.toList());
+    }
+
+    static List<ResolvedValueDeclaration> getUnaryAssignedVariables(List<Statement> currentStatements) {
+        return getNodesOfType(currentStatements, UnaryExpr.class).stream()
+                .filter(unaryExpr -> UNARY_ASSIGN_OPERATORS.contains(unaryExpr.getOperator()))
+                .filter(unaryExpr -> !(unaryExpr.getExpression() instanceof ArrayAccessExpr))
                 .map(AstUtils::resolveTarget).collect(Collectors.toList());
     }
 
@@ -232,10 +275,10 @@ class AstUtils {
         if (wrappedNode instanceof VariableDeclarationExpr) {
             return getModifiers((VariableDeclarationExpr) wrappedNode);
         }
-        if(wrappedNode instanceof VariableDeclarator){
+        if (wrappedNode instanceof VariableDeclarator) {
             Optional<Node> maybeParent = wrappedNode.getParentNode();
-            if(maybeParent.isPresent() && maybeParent.get() instanceof VariableDeclarationExpr){
-                return getModifiers((VariableDeclarationExpr)maybeParent.get());
+            if (maybeParent.isPresent() && maybeParent.get() instanceof VariableDeclarationExpr) {
+                return getModifiers((VariableDeclarationExpr) maybeParent.get());
             }
         }
         throw new IllegalArgumentException("Unsupported declaration: " + declaration);
@@ -243,6 +286,26 @@ class AstUtils {
 
     private static EnumSet<Modifier> getModifiers(VariableDeclarationExpr declaration) {
         return EnumSet.copyOf(declaration.getModifiers());
+    }
+
+    static boolean isDeclaredOutsideLoop(ResolvedValueDeclaration declaration, Statement statement) {
+        Optional<Statement> loopBody = getLoopBody(statement);
+        return loopBody.map(body -> !isDeclaredIn(declaration, Collections.singletonList(body))).orElse(false);
+    }
+
+    private static Optional<Statement> getLoopBody(Node node) {
+        Statement body = null;
+        if (node instanceof ForStmt) {
+            body = ((ForStmt) node).getBody();
+        } else if (node instanceof WhileStmt) {
+            body = ((WhileStmt) node).getBody();
+        } else if (node instanceof DoStmt) {
+            body = ((DoStmt) node).getBody();
+        }
+        if (body != null) {
+            return Optional.of(body);
+        }
+        return node.getParentNode().flatMap(AstUtils::getLoopBody);
     }
 
 }

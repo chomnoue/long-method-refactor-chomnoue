@@ -52,7 +52,11 @@ public class LongMethodRefactor {
         for (int i = 0; i < total; i++) {
             float percent = 100f * (i + 1) / total;
             log.info("Refactoring {}: {}%s", javaFiles.get(i), percent);
-            refactorLonMethods(javaFiles.get(i), symbolSolver);
+            try {
+                refactorLonMethods(javaFiles.get(i), symbolSolver);
+            } catch (Exception ex) { //NOPMD should not stop if failed to refactor a file for any reason
+                log.error("Failed to refactor file {}", javaFiles.get(i), ex);
+            }
         }
     }
 
