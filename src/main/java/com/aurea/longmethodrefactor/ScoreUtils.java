@@ -8,7 +8,7 @@ import com.github.javaparser.utils.Utils;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
-public class ScoreUtils {
+class ScoreUtils {
 
     private static final int MAX_SCORE_PARAM = 4;
 

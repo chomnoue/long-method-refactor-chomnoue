@@ -80,11 +80,8 @@ public class RefactoringCandidatesProvider {
         if (breaksExternalLoop(currentStatements)) {
             return true;
         }
-        if (continuesExternalLoop(currentStatements)) {
-            return true;
-        }
+        return continuesExternalLoop(currentStatements);
 
-        return false;
     }
 
     private static boolean breaksExternalLoop(List<Statement> currentStatements) {
