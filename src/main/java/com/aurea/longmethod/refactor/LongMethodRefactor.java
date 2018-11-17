@@ -28,27 +28,33 @@ public class LongMethodRefactor {
     private static final String JAVA_SUFFIX = ".java";
 
     private final int maxLength;
-    private final String srcPath;
+    private final String srcPaths;
     private final RefactoringCandidatesProvider candidatesProvider;
     private final ApplicableCandidateProvider applicableCandidateProvider;
 
-    LongMethodRefactor(@Value("${maxLength:30}") int maxLength, @Value("${srcPath}") String srcPath,
+    LongMethodRefactor(@Value("${maxLength:30}") int maxLength, @Value("${srcPaths}") String srcPaths,
             RefactoringCandidatesProvider candidatesProvider,
             ApplicableCandidateProvider applicableCandidateProvider) {
         this.maxLength = maxLength;
-        this.srcPath = srcPath;
+        this.srcPaths = srcPaths;
         this.candidatesProvider = candidatesProvider;
         this.applicableCandidateProvider = applicableCandidateProvider;
     }
 
     void refactorLongMethods() throws IOException {
-        Path rootPath = Paths.get(srcPath);
+        for (String srcPath : srcPaths.split(",")) {
+            refactorLongMethods(Paths.get(srcPath));
+        }
+
+    }
+
+    private void refactorLongMethods(Path rootPath) throws IOException {
         JavaSymbolSolver symbolSolver = new JavaSymbolSolver(new JavaParserTypeSolver(rootPath));
         List<Path> javaFiles = Files.walk(rootPath)
                 .filter(path -> Files.isRegularFile(path) && path.toFile().getName().endsWith(JAVA_SUFFIX))
                 .collect(Collectors.toList());
         int total = javaFiles.size();
-        log.info("Performing Long Method refactoring for {} files", total);
+        log.info("Performing Long Method refactoring for {} files in {}", total, rootPath);
         for (int i = 0; i < total; i++) {
             float percent = 100f * (i + 1) / total;
             log.info("Refactoring {}: {}%s", javaFiles.get(i), percent);
@@ -58,6 +64,7 @@ public class LongMethodRefactor {
                 log.error("Failed to refactor file {}", javaFiles.get(i), ex);
             }
         }
+        log.info("Completed Long Method refactoring for {}", rootPath);
     }
 
     private void refactorLonMethods(Path path, JavaSymbolSolver symbolSolver) throws IOException {

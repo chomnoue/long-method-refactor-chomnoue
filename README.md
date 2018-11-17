@@ -5,7 +5,7 @@
  Using the technique suggested in [this paper](https://www.cqse.eu/publications/2016-deriving-extract-method-refactoring-suggestions-for-long-methods.pdf) 
  to choose the best refactoring candidates.
  
- Please check this [tests file](https://github.com/trilogy-group/long-method-refactor-chomnoue/blob/master/src/test/groovy/com/aurea/longmethod/refactor/LongMethodRefactorLenghtThirtySpec.groovy) for an example of long method and refactored output.
+ Please check this [tests file](https://github.com/chomnoue/long-method-refactor-chomnoue/blob/master/src/test/groovy/com/aurea/longmethod/refactor/LongMethodRefactorLenghtThirtySpec.groovy) for an example of long method and refactored output.
 
 ## Usage
 ### Build the tool
@@ -15,19 +15,19 @@
 
 ### Run it
 ```
-java -jar build/libs/long-method-refactor-0.0.1-SNAPSHOT.jar --srcPath=<path_to_the_java_source_root>
+java -jar build/libs/long-method-refactor-0.0.1-SNAPSHOT.jar --srcPaths=<path_to_the_java_source_root>
 ```
 
 For example
 
 ```
-java -jar build/libs/long-method-refactor-0.0.1-SNAPSHOT.jar --srcPath=/home/chomnoue/projects/bootcamp/okhttp/okhttp/src/main/java
+java -jar build/libs/long-method-refactor-0.0.1-SNAPSHOT.jar --srcPaths=/home/chomnoue/projects/bootcamp/okhttp/okhttp/src/main/java
 ```
 
 #### Supported parameters
 | Parameter        | Description   | Required   | Default value   |
 | :-------------: |:-------------:|:-------------:|:-------------:|
-| srcPath      | Path to the Java source dir | Yes | |
+| srcPaths      | Comma separated list of paths to Java source dirs | Yes | |
 | maxLength      | Maximum length of a method, over which refactoring is considered      |No|30|
 | minStatements | Minimum number of statements considered to be extracted to another method|No|3|
 |minMethodLength| Minimum length of the refactored methods, to avoid too small methods |No|6|
@@ -37,9 +37,11 @@ java -jar build/libs/long-method-refactor-0.0.1-SNAPSHOT.jar --srcPath=/home/cho
 ## Project status
 Tested on :
 
-* [conditional-return reference project](https://github.com/trilogy-group/bootcamp-conditional-return-reference-chomnoue), **branch long-method-refactor-reference**: 1 
-class refactored
-* [okhttp](https://github.com/square/okhttp), **okhttp** module: 26 classes refactored
+| Project        | Files refactored   | Zip before   | Zip after   |
+| :-------------: |:-------------:|:-------------:|:-------------:|
+|[conditional-return reference project](https://github.com/chomnoue/bootcamp-conditional-return-reference-chomnoue)|1|[before](https://drive.google.com/open?id=16Bi-CzYlkf2c99h8JsQ7pwetfyDZAtwp)|[after](https://drive.google.com/open?id=1SyReO6Bx0X4cnbvuH_sVK248gaYoalpm)|
+|[okhttp](https://github.com/square/okhttp)|33|[before](https://drive.google.com/open?id=11zZBj_Tj6t511FlU3C9GPWo5s11cF9iN)|[after](https://drive.google.com/open?id=1Q7xrkhqOMg0FmixsIdNrOo8wvs1S1KZS)|
+
 
 Both projects compiled and existing tests passed after refactoring.
 

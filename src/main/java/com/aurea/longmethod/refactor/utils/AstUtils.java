@@ -52,7 +52,8 @@ public class AstUtils {
         if (node instanceof NameExpr) {
             NameExpr nameExpr = (NameExpr) node;
             Optional<ResolvedValueDeclaration> maybeNameDeclaration = ResolveUtils.resolveNameExpression(nameExpr);
-            return maybeNameDeclaration.map(nameDeclaration -> isSameValue(declaration, nameDeclaration)).orElse(false);
+            return maybeNameDeclaration.map(nameDeclaration -> isSameValue(declaration, nameDeclaration))
+                    .orElse(declaration.getName().equals(nameExpr.getNameAsString()));
         }
         return isUsed(declaration, node.getChildNodes());
     }
